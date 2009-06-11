@@ -9,6 +9,7 @@ import logging
 import sys, os, re
 
 from gitosis import access
+from gitosis import configutil
 from gitosis import repository
 from gitosis import gitweb
 from gitosis import gitdaemon
@@ -139,11 +140,16 @@ def serve(
 
         # create leading directories
         p = topdir
+
+        newdirmode = configutil.get_default(cfg, 'repo %s' % (relpath, ), 'dirmode', None)
+        if newdirmode is None:
+            newdirmode = configutil.get_default(cfg, 'gitosis', 'dirmode', 0750)
+
         for segment in repopath.split(os.sep)[:-1]:
             p = os.path.join(p, segment)
-            util.mkdir(p, 0750)
+            util.mkdir(p, newdirmode)
 
-        repository.init(path=fullpath)
+        repository.init(path=fullpath, mode=newdirmode)
         gitweb.set_descriptions(
             config=cfg,
             )
