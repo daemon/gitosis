@@ -9,13 +9,13 @@ import logging
 import sys, os, re
 
 from gitosis import access
-from gitosis import configutil
 from gitosis import repository
 from gitosis import gitweb
 from gitosis import gitdaemon
 from gitosis import app
 from gitosis import util
 from gitosis import snagit
+from ConfigParser import NoSectionError, NoOptionError
 
 log = logging.getLogger('gitosis.serve')
 
@@ -141,9 +141,13 @@ def serve(
         # create leading directories
         p = topdir
 
-        newdirmode = configutil.get_default(cfg, 'repo %s' % (relpath, ), 'dirmode', None)
-        if newdirmode is None:
-            newdirmode = configutil.get_default(cfg, 'gitosis', 'dirmode', 0750)
+        try:
+            newdirmode = int(str(cfg.get('repo %s' % (relpath, ), 'dirmode')), 8)
+        except (NoSectionError, NoOptionError):
+            try:
+                newdirmode = int(str(cfg.get('gitosis', 'dirmode')), 8)
+            except (NoSectionError, NoOptionError):
+                newdirmode = 0750
 
         for segment in repopath.split(os.sep)[:-1]:
             p = os.path.join(p, segment)
