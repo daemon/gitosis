@@ -70,22 +70,9 @@ def test_init_templates():
         )
     got = readFile(os.path.join(path, 'hooks', 'post-update'))
     eq(got, '#!/bin/sh\n# i can override standard templates\n')
-    # Git doesn't create missing hooks
-    #assert os.path.isfile(os.path.join(path, 'hooks', 'pre-rebase'))
-
-def test_init_default_templates():
-    tmp = maketemp()
-    path = os.path.join(tmp, 'repo.git')
-    repository.init(path)
-    hook_path = os.path.join(path, 'hooks', 'post-receive')
-    check_mode(
-        hook_path,
-        0755,
-        is_file=True,
-        )
-    got = readFile(hook_path)
-    eq(got, '#!/bin/sh\nset -e\ngit-update-server-info\ngitosis-run-hook update-mirrors')
-    
+    # standard templates are there, too
+    assert (os.path.isfile(os.path.join(path, 'hooks', 'pre-rebase'))
+            or os.path.isfile(os.path.join(path, 'hooks', 'pre-rebase.sample')))
 
 def test_init_environment():
     tmp = maketemp()
@@ -363,26 +350,3 @@ def test_fast_import_parent():
         )
     eq(sorted(os.listdir(export)),
        sorted(['foo', 'quux']))
-
-def test_mirror():
-    tmp = maketemp()
-    main_path = os.path.join(tmp, 'main.git')
-    mirror_path = os.path.join(tmp, 'mirror.git')
-    repository.init(path=main_path, template=False)
-    repository.init(path=mirror_path, template=False)
-    repository.fast_import(
-        git_dir=main_path,
-        commit_msg='foo initial bar',
-        committer='Mr. Unit Test <unit.test@example.com>',
-        files=[
-            ('foo', 'bar\n'),
-            ],
-        )
-    repository.mirror(main_path, mirror_path)
-    export = os.path.join(tmp, 'export')
-    repository.export(
-        git_dir=mirror_path,
-        path=export,
-        )
-    eq(os.listdir(export),
-       ['foo'])

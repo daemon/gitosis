@@ -8,14 +8,15 @@ import logging
 
 import sys, os, re
 
+from ConfigParser import NoSectionError, NoOptionError
+
 from gitosis import access
 from gitosis import repository
 from gitosis import gitweb
 from gitosis import gitdaemon
+from gitosis import htaccess
 from gitosis import app
 from gitosis import util
-from gitosis import snagit
-from ConfigParser import NoSectionError, NoOptionError
 
 log = logging.getLogger('gitosis.serve')
 
@@ -54,6 +55,36 @@ class WriteAccessDenied(AccessDenied):
 
 class ReadAccessDenied(AccessDenied):
     """Repository read access denied"""
+
+def auto_init_repo(cfg,topdir,repopath):
+    # create leading directories
+    p = topdir
+
+    assert repopath.endswith('.git'), 'must have .git extension'
+    newdirmode = util.getConfigDefault(cfg,
+                                       'repo %s' % repopath[:-4],
+                                       'dirmode',
+                                       None,
+                                       'defaults')
+    if newdirmode is not None:
+        newdirmode = int(newdirmode, 8)
+    else:
+        newdirmode = 0750
+
+    for segment in repopath.split(os.sep)[:-1]:
+        p = os.path.join(p, segment)
+        util.mkdir(p, newdirmode)
+
+    fullpath = os.path.join(topdir, repopath)
+
+    # init using a custom template, if required
+    try:
+        template = cfg.get('gitosis', 'init-template')
+        repository.init(path=fullpath, template=template, mode=newdirmode)
+    except (NoSectionError, NoOptionError):
+        pass
+
+    repository.init(path=fullpath, mode=newdirmode)
 
 def serve(
     cfg,
@@ -138,22 +169,7 @@ def serve(
         # refers to it, we're serving a write request, and the user is
         # authorized to do that: create the repository on the fly
 
-        # create leading directories
-        p = topdir
-
-        try:
-            newdirmode = int(str(cfg.get('repo %s' % (relpath, ), 'dirmode')), 8)
-        except (NoSectionError, NoOptionError):
-            try:
-                newdirmode = int(str(cfg.get('gitosis', 'dirmode')), 8)
-            except (NoSectionError, NoOptionError):
-                newdirmode = 0750
-
-        for segment in repopath.split(os.sep)[:-1]:
-            p = os.path.join(p, segment)
-            util.mkdir(p, newdirmode)
-
-        repository.init(path=fullpath, mode=newdirmode)
+        auto_init_repo(cfg,topdir,repopath)
         gitweb.set_descriptions(
             config=cfg,
             )
@@ -163,6 +179,9 @@ def serve(
             path=os.path.join(generated, 'projects.list'),
             )
         gitdaemon.set_export_ok(
+            config=cfg,
+            )
+        htaccess.gen_htaccess_if_enabled(
             config=cfg,
             )
 
@@ -201,14 +220,6 @@ class Main(app.App):
 
         os.chdir(os.path.expanduser('~'))
 
-        if (cmd == "snagit list-repos"):
-            try:
-                snagit.list_repos(cfg, user, cmd)
-                sys.exit(0)
-            except Exception, e:
-                main_log.error('%s', e)
-                sys.exit(1)
-        
         try:
             newcmd = serve(
                 cfg=cfg,
